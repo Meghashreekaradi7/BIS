@@ -1,0 +1,43 @@
+import random
+
+# --------- Parameters -----------
+POP_SIZE = 6          # Number of individuals
+GENERATIONS = 15      # Number of generations
+MUTATION_RATE = 0.3   # Probability of mutation
+LOW, HIGH = -10, 10   # Search space
+
+# --------- Fitness Function -----------
+def fitness(x):
+    # Goal: minimize (x-5)^2, fitness higher if closer to 5
+    return -((x - 5)**2)
+
+# --------- Create Initial Population -----------
+population = [random.uniform(LOW, HIGH) for _ in range(POP_SIZE)]
+
+# --------- GEA Loop -----------
+for gen in range(GENERATIONS):
+    # Evaluate fitness
+    population.sort(key=fitness, reverse=True)  # higher fitness first
+    best = population[0]
+    print(f"Gen {gen+1}: Best x = {best:.2f}, Fitness = {fitness(best):.2f}")
+
+    # Selection: take top half
+    parents = population[:POP_SIZE//2]
+
+    # Generate new population via crossover & mutation
+    new_population = []
+    while len(new_population) < POP_SIZE:
+        p1, p2 = random.sample(parents, 2)
+        # Crossover: average
+        child = (p1 + p2)/2
+        # Mutation: small random change
+        if random.random() < MUTATION_RATE:
+            child += random.uniform(-1, 1)
+        new_population.append(child)
+
+    population = new_population
+
+# --------- Final Result -----------
+best = max(population, key=fitness)
+print("\nBest solution found:")
+print(f"x = {best:.2f}, Fitness = {fitness(best):.2f}")
