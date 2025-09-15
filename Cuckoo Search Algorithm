@@ -1,0 +1,93 @@
+import numpy as np
+import random
+
+def total_distance(tour, dist_matrix):
+    """Calculate total distance of the tour."""
+    distance = 0
+    for i in range(len(tour)):
+        distance += dist_matrix[tour[i-1]][tour[i]]
+    return distance
+
+def levy_flight(solution):
+    """
+    Generate a new solution by performing a small change.
+    Here, we simulate Levy flight by swapping two cities.
+    """
+    new_solution = solution.copy()
+    a, b = random.sample(range(len(solution)), 2)
+    new_solution[a], new_solution[b] = new_solution[b], new_solution[a]
+    return new_solution
+
+def abandon_worst_nests(nests, fitness, pa, dist_matrix):
+    """
+    Abandon fraction 'pa' of worst nests and generate new random nests.
+    """
+    n = len(nests)
+    num_abandon = int(pa * n)
+    worst_indices = np.argsort(fitness)[-num_abandon:]  # Indices of worst nests
+
+    for idx in worst_indices:
+        nests[idx] = random.sample(range(len(dist_matrix)), len(dist_matrix))
+        fitness[idx] = total_distance(nests[idx], dist_matrix)
+
+    return nests, fitness
+
+def cuckoo_search_tsp(dist_matrix, n_nests=25, pa=0.25, max_iter=500):
+    n_cities = len(dist_matrix)
+    # Step 1: Initialize nests
+    nests = [random.sample(range(n_cities), n_cities) for _ in range(n_nests)]
+    fitness = [total_distance(nest, dist_matrix) for nest in nests]
+
+    best_idx = np.argmin(fitness)
+    best_solution = nests[best_idx]
+    best_fitness = fitness[best_idx]
+
+    iteration = 0
+    while iteration < max_iter:
+        # Step 3a: Generate new solutions
+        for i in range(n_nests):
+            new_solution = levy_flight(nests[i])
+            new_fitness = total_distance(new_solution, dist_matrix)
+
+            # Step 3b: If new solution better, replace random nest
+            j = random.randint(0, n_nests - 1)
+            if new_fitness < fitness[j]:
+                nests[j] = new_solution
+                fitness[j] = new_fitness
+
+                # Update global best
+                if new_fitness < best_fitness:
+                    best_solution = new_solution
+                    best_fitness = new_fitness
+
+        # Step 3c: Abandon worst nests and replace
+        nests, fitness = abandon_worst_nests(nests, fitness, pa, dist_matrix)
+
+        # Step 3d: Keep track of best
+        current_best_idx = np.argmin(fitness)
+        if fitness[current_best_idx] < best_fitness:
+            best_solution = nests[current_best_idx]
+            best_fitness = fitness[current_best_idx]
+
+        iteration += 1
+
+        if iteration % 50 == 0 or iteration == 1:
+            print(f"Iteration {iteration}: Best distance = {best_fitness:.4f}")
+
+    return best_solution, best_fitness
+
+
+# Example symmetric distance matrix between 6 cities
+dist_matrix = [
+    [0, 3, 4, 2, 7, 3],
+    [3, 0, 4, 6, 3, 5],
+    [4, 4, 0, 5, 8, 2],
+    [2, 6, 5, 0, 6, 4],
+    [7, 3, 8, 6, 0, 5],
+    [3, 5, 2, 4, 5, 0]
+]
+
+best_tour, best_dist = cuckoo_search_tsp(dist_matrix, n_nests=30, pa=0.3, max_iter=300)
+
+print("\nBest tour found:", best_tour)
+print("Best total distance:", best_dist)
