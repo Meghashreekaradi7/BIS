@@ -1,0 +1,193 @@
+optimize supply chain operations including inventory management ,transportation and production scheduling to find the best combination of decisions that minimize costs and improve efficiency using genetic algorithm
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+
+# ===============================
+# USER INPUT SECTION
+# ===============================
+
+num_factories = int(input("Enter number of factories: "))
+num_dcs = int(input("Enter number of distribution centers: "))
+
+print("\nEnter production capacities for each factory (space-separated):")
+prod_capacity = np.array(list(map(int, input().split())))
+
+print("\nEnter production costs for each factory (space-separated):")
+production_cost = np.array(list(map(float, input().split())))
+
+print("\nEnter demand for each distribution center (space-separated):")
+demand = np.array(list(map(int, input().split())))
+
+print("\nEnter inventory holding cost per unit:")
+inventory_cost = float(input())
+
+print("\nEnter transportation costs (factory x DC matrix):")
+transport_cost = []
+for i in range(num_factories):
+    print(f"  Enter costs from Factory {i+1} to all DCs (space-separated):")
+    row = list(map(float, input().split()))
+    transport_cost.append(row)
+transport_cost = np.array(transport_cost)
+
+# ===============================
+# GA PARAMETERS
+# ===============================
+
+POP_SIZE = 60       # number of individuals
+N_GEN = 100         # number of generations
+MUT_RATE = 0.25     # mutation probability
+TOURN_SIZE = 3      # tournament size
+
+# ===============================
+# HELPER FUNCTIONS
+# ===============================
+
+def create_individual():
+    """Generate a feasible individual that roughly meets demand."""
+    production = np.random.randint(50, prod_capacity + 1)
+
+    transport = np.zeros((num_factories, num_dcs), dtype=int)
+    remaining_demand = demand.copy()
+    remaining_prod = production.copy()
+
+    # Distribute production to meet demand
+    for j in range(num_dcs):
+        for i in range(num_factories):
+            if remaining_demand[j] > 0 and remaining_prod[i] > 0:
+                qty = np.random.randint(0, min(remaining_prod[i], remaining_demand[j]) + 1)
+                transport[i, j] = qty
+                remaining_demand[j] -= qty
+                remaining_prod[i] -= qty
+
+    # inventory (some buffer)
+    inventory = np.random.randint(0, 20, size=num_dcs)
+    return (production, transport, inventory)
+
+
+def evaluate(individual):
+    """Compute total cost for an individual."""
+    production, transport, inventory = individual
+
+    total_supplied = transport.sum(axis=0)  # per DC
+    total_sent = transport.sum(axis=1)      # per factory
+
+    # Violations
+    unmet_demand = np.maximum(0, demand - (total_supplied + inventory))
+    over_supply = np.maximum(0, total_supplied - demand)
+    overprod = np.maximum(0, production - prod_capacity)
+    underprod = np.maximum(0, total_sent - production)  # key constraint
+
+    # Cost components
+    prod_cost = np.sum(production * production_cost)
+    trans_cost = np.sum(transport * transport_cost)
+    inv_cost = np.sum(inventory * inventory_cost)
+
+    # Penalties
+    penalty = (
+        np.sum(unmet_demand) * 10000 +  # must meet demand
+        np.sum(underprod) * 8000 +      # must produce enough to cover shipments
+        np.sum(overprod) * 5000 +       # cannot exceed capacity
+        np.sum(over_supply) * 200       # small penalty for extra shipping
+    )
+
+    total_cost = prod_cost + trans_cost + inv_cost + penalty
+    return total_cost
+
+
+def crossover(parent1, parent2):
+    """Uniform crossover: mix parent genes."""
+    p1_prod, p1_trans, p1_inv = parent1
+    p2_prod, p2_trans, p2_inv = parent2
+
+    child_prod = np.where(np.random.rand(num_factories) < 0.5, p1_prod, p2_prod)
+    child_trans = np.where(np.random.rand(num_factories, num_dcs) < 0.5, p1_trans, p2_trans)
+    child_inv = np.where(np.random.rand(num_dcs) < 0.5, p1_inv, p2_inv)
+
+    return (child_prod.copy(), child_trans.copy(), child_inv.copy())
+
+
+def mutate(individual):
+    """Randomly tweak production, transport, or inventory values."""
+    production, transport, inventory = individual
+
+    # Mutate production
+    if random.random() < 0.3:
+        i = random.randrange(num_factories)
+        production[i] = np.clip(production[i] + np.random.randint(-50, 50), 0, prod_capacity[i])
+
+    # Mutate transport
+    if random.random() < 0.5:
+        i, j = random.randrange(num_factories), random.randrange(num_dcs)
+        transport[i, j] = np.clip(transport[i, j] + np.random.randint(-30, 30), 0, 300)
+
+    # Mutate inventory
+    if random.random() < 0.2:
+        j = random.randrange(num_dcs)
+        inventory[j] = np.clip(inventory[j] + np.random.randint(-5, 10), 0, 50)
+
+    return (production, transport, inventory)
+
+
+def tournament_selection(population, fitnesses):
+    """Select the best individual from a random subset."""
+    contenders = random.sample(list(zip(population, fitnesses)), TOURN_SIZE)
+    return min(contenders, key=lambda x: x[1])[0]
+
+# ===============================
+# MAIN GA LOOP
+# ===============================
+
+population = [create_individual() for _ in range(POP_SIZE)]
+best_costs = []
+
+for gen in range(N_GEN):
+    fitnesses = [evaluate(ind) for ind in population]
+    next_gen = []
+
+    for _ in range(POP_SIZE // 2):
+        parent1 = tournament_selection(population, fitnesses)
+        parent2 = tournament_selection(population, fitnesses)
+
+        child1 = crossover(parent1, parent2)
+        child2 = crossover(parent2, parent1)
+
+        if random.random() < MUT_RATE:
+            child1 = mutate(child1)
+        if random.random() < MUT_RATE:
+            child2 = mutate(child2)
+
+        next_gen.extend([child1, child2])
+
+    population = next_gen
+    best_fitness = min(fitnesses)
+    best_costs.append(best_fitness)
+    print(f"Generation {gen+1}: Best Cost = {best_fitness:.2f}")
+
+# ===============================
+# OUTPUT BEST SOLUTION
+# ===============================
+
+final_fitnesses = [evaluate(ind) for ind in population]
+best_idx = np.argmin(final_fitnesses)
+best_solution = population[best_idx]
+best_cost = evaluate(best_solution)
+
+print("\nBest Solution Found:")
+print("---------------------")
+print("Production Quantities:", best_solution[0])
+print("Transport Matrix:\n", best_solution[1])
+print("Inventory Levels:", best_solution[2])
+print("Total Cost:", best_cost)
+
+# ===============================
+# PLOT CONVERGENCE GRAPH
+# ===============================
+
+plt.figure(figsize=(8, 5))
+plt.plot(best_costs, marker='o', color='blue')
+plt.title("Genetic Algorithm Convergence - Supply Chain Optimization")
+plt.xlabel("Generation")
+plt.ylabel("Best Cost")
+plt.grid(True)
+plt.show()
