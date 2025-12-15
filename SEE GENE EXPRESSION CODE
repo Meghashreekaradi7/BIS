@@ -1,0 +1,65 @@
+# Step 1: Install required libraries
+!pip install pandas numpy statsmodels
+
+# Step 2: Import the necessary libraries
+import pandas as pd
+import numpy as np
+import statsmodels.api as sm
+
+# Step 3: Simulated gene expression data for analysis
+data = {
+    "GeneID": ["GeneA", "GeneB", "GeneC"],
+    "Sample1": [50, 5, 200],
+    "Sample2": [60, 10, 180],
+    "Sample3": [70, 15, 190],
+    "Sample4": [80, 8, 210]
+}
+
+# Convert data to a pandas DataFrame
+df = pd.DataFrame(data)
+
+# Step 4: Split data into control and treatment groups
+control = df[["Sample1", "Sample2"]]
+treatment = df[["Sample3", "Sample4"]]
+
+# Step 5: Perform gene expression analysis (fold change and t-test)
+fold_changes = []
+p_values = []
+
+for gene in df["GeneID"]:
+    control_values = control.loc[df["GeneID"] == gene].values[0]
+    treatment_values = treatment.loc[df["GeneID"] == gene].values[0]
+    
+    # Calculate fold change (mean of treatment / mean of control)
+    fold_change = np.mean(treatment_values) / np.mean(control_values)
+    fold_changes.append(fold_change)
+    
+    # Perform t-test to compare groups
+    t_stat_result = sm.stats.ttest_ind(control_values, treatment_values)
+    
+    # Extract the t-statistic and p-value from the result tuple
+    t_stat = t_stat_result[0]  # t-statistic is the first element
+    p_value = t_stat_result[1]  # p-value is the second element
+    
+    p_values.append(p_value)
+
+# Step 6: Store results in a DataFrame
+results = pd.DataFrame({
+    "Gene": df["GeneID"],
+    "FoldChange": fold_changes,
+    "PValue": p_values
+})
+
+# Step 7: Adjust p-values for multiple testing (Bonferroni correction)
+results["AdjustedPValue"] = results["PValue"] * len(results)
+
+# Step 8: Filter significant genes (adjust threshold as needed)
+significant_genes = results[results["AdjustedPValue"] < 0.1]  # Adjusted p-value threshold set to 0.1
+
+# Print the results for inspection
+print("Gene Expression Results:")
+print(results)
+
+# Display significant genes found
+print("Significant genes found (adjusted p-value < 0.1):")
+print(significant_genes)
